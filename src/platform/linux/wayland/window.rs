@@ -238,7 +238,7 @@ impl WindowStore {
     }
 
     pub fn find_wid(&self, surface: &wl_surface::WlSurface) -> Option<WindowId> {
-        self.windows.iter().find(|w| w.surface.equals(surface)).map(make_wid)
+        self.windows.iter().map(|w| w.surface).find(|surf| surf.equals(surface)).map(make_wid)
     }
 
     pub fn cleanup(&mut self) {
