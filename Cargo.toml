@@ -1,6 +1,6 @@
 [package]
 name = "winit"
-version = "0.17.2"
+version = "0.18.0"
 authors = ["The winit contributors", "Pierre Krieger <pierre.krieger1708@gmail.com>"]
 description = "Cross-platform window creation library."
 keywords = ["windowing"]
@@ -11,7 +11,7 @@ documentation = "https://docs.rs/winit"
 categories = ["gui"]
 
 [package.metadata.docs.rs]
-features = ["icon_loading"]
+features = ["icon_loading", "serde"]
 
 [features]
 icon_loading = ["image"]
@@ -20,7 +20,8 @@ icon_loading = ["image"]
 lazy_static = "1"
 libc = "0.2"
 log = "0.4"
-image = { version = "0.19", optional = true }
+image = { version = "0.20.1", optional = true }
+serde = { version = "1", optional = true, features = ["serde_derive"] }
 
 [target.'cfg(target_os = "android")'.dependencies.android_glue]
 version = "0.2"
@@ -30,24 +31,28 @@ objc = "0.2.3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2.3"
-cocoa = "0.17"
+cocoa = "0.18.4"
 core-foundation = "0.6"
-core-graphics = "0.16"
+core-graphics = "0.17.3"
 
 [target.'cfg(target_os = "windows")'.dependencies.winapi]
-version = "0.3.5"
+version = "0.3.6"
 features = [
     "combaseapi",
     "dwmapi",
+    "errhandlingapi",
     "hidusage",
     "libloaderapi",
     "objbase",
+    "ole2",
     "processthreadsapi",
     "shellapi",
     "shellscalingapi",
     "shobjidl_core",
     "unknwnbase",
+    "winbase",
     "windowsx",
+    "winerror",
     "wingdi",
     "winnt",
     "winuser",

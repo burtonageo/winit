@@ -1,21 +1,24 @@
 use std;
 use std::cell::{Cell, RefCell};
+use std::f64;
 use std::ops::Deref;
 use std::os::raw::c_void;
 use std::sync::Weak;
 use std::sync::atomic::{Ordering, AtomicBool};
 
-use cocoa;
 use cocoa::appkit::{
     self,
     CGFloat,
+    NSApp,
     NSApplication,
     NSColor,
+    NSRequestUserAttentionType,
     NSScreen,
     NSView,
     NSWindow,
     NSWindowButton,
     NSWindowStyleMask,
+    NSApplicationActivationPolicy,
 };
 use cocoa::base::{id, nil};
 use cocoa::foundation::{NSAutoreleasePool, NSDictionary, NSPoint, NSRect, NSSize, NSString};
@@ -584,6 +587,19 @@ impl WindowExt for Window2 {
     fn get_nsview(&self) -> *mut c_void {
         *self.view as *mut c_void
     }
+
+    #[inline]
+    fn request_user_attention(&self, is_critical: bool) {
+        let request_type = if is_critical {
+            NSRequestUserAttentionType::NSCriticalRequest
+        } else {
+            NSRequestUserAttentionType::NSInformationalRequest
+        };
+
+        unsafe {
+            NSApp().requestUserAttention_(request_type);
+        }
+    }
 }
 
 impl Window2 {
@@ -718,7 +734,15 @@ impl Window2 {
             if app == nil {
                 None
             } else {
-                app.setActivationPolicy_(activation_policy.into());
+                let ns_activation_policy = match activation_policy {
+                    ActivationPolicy::Regular =>
+                        NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular,
+                    ActivationPolicy::Accessory =>
+                        NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory,
+                    ActivationPolicy::Prohibited =>
+                        NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited,
+                };
+                app.setActivationPolicy_(ns_activation_policy);
                 app.finishLaunching();
                 Some(app)
             }
@@ -851,6 +875,16 @@ impl Window2 {
             let view = new_view(window, shared);
             view.non_nil().map(|view| {
                 view.setWantsBestResolutionOpenGLSurface_(YES);
+
+                // On Mojave, views automatically become layer-backed shortly after being added to
+                // a window. Changing the layer-backedness of a view breaks the association between
+                // the view and its associated OpenGL context. To work around this, on Mojave we
+                // explicitly make the view layer-backed up front so that AppKit doesn't do it
+                // itself and break the association with its context.
+                if f64::floor(appkit::NSAppKitVersionNumber) > appkit::NSAppKitVersionNumber10_12 {
+                    view.setWantsLayer(YES);
+                }
+
                 window.setContentView_(*view);
                 window.makeFirstResponder_(*view);
                 view

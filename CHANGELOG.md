@@ -1,18 +1,37 @@
 # Unreleased
 
-- On Wayland, titles will now be displayed in the window header decoration
-- On Wayland, key repetition is now ended when keyboard loses focus
+- On X11, fixed panic caused by dropping the window before running the event loop.
+- Introduce `WindowBuilderExt::with_app_id` to allow setting the application ID on Wayland.
+
+# Version 0.18.0 (2018-11-07)
+
+- **Breaking:** `image` crate upgraded to 0.20. This is exposed as part of the `icon_loading` API.
+- On Wayland, pointer events will now provide the current modifiers state.
+- On Wayland, titles will now be displayed in the window header decoration.
+- On Wayland, key repetition is now ended when keyboard loses focus.
 - On Wayland, windows will now use more stylish and modern client side decorations.
 - On Wayland, windows will use server-side decorations when available.
-- Added support for F16-F24 keys.
+- **Breaking:** Added support for F16-F24 keys (variants were added to the `VirtualKeyCode` enum).
 - Fixed graphical glitches when resizing on Wayland.
 - On Windows, fix freezes when performing certain actions after a window resize has been triggered. Reintroduces some visual artifacts when resizing.
 - Updated window manager hints under X11 to v1.5 of [Extended Window Manager Hints](https://specifications.freedesktop.org/wm-spec/wm-spec-1.5.html#idm140200472629520).
 - Added `WindowBuilderExt::with_gtk_theme_variant` to X11-specific `WindowBuilder` functions.
 - Fixed UTF8 handling bug in X11 `set_title` function.
 - On Windows, `Window::set_cursor` now applies immediately instead of requiring specific events to occur first.
-- On Windows, fix window.set_maximized().
+- On Windows, the `HoveredFile` and `HoveredFileCancelled` events are now implemented.
+- On Windows, fix `Window::set_maximized`.
+- On Windows 10, fix transparency (#260).
+- On macOS, fix modifiers during key repeat.
 - Implemented the `Debug` trait for `Window`, `EventsLoop`, `EventsLoopProxy` and `WindowBuilder`.
+- On X11, now a `Resized` event will always be generated after a DPI change to ensure the window's logical size is consistent with the new DPI.
+- Added further clarifications to the DPI docs.
+- On Linux, if neither X11 nor Wayland manage to initialize, the corresponding panic now consists of a single line only.
+- Add optional `serde` feature with implementations of `Serialize`/`Deserialize` for DPI types and various event types.
+- Add `PartialEq`, `Eq`, and `Hash` implementations on public types that could have them but were missing them.
+- On X11, drag-and-drop receiving an unsupported drop type can no longer cause the WM to freeze.
+- Fix issue whereby the OpenGL context would not appear at startup on macOS Mojave (#1069).
+- **Breaking:** Removed `From<NSApplicationActivationPolicy>` impl from `ActivationPolicy` on macOS.
+- On macOS, the application can request the user's attention with `WindowExt::request_user_attention`.
 
 # Version 0.17.2 (2018-08-19)
 

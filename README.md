@@ -7,7 +7,7 @@
 
 ```toml
 [dependencies]
-winit = "0.17"
+winit = "0.18"
 ```
 
 ## [Documentation](https://docs.rs/winit)
@@ -40,6 +40,12 @@ fn main() {
     });
 }
 ```
+
+### Cargo Features
+
+Winit provides the following features, which can be enabled in your `Cargo.toml` file:
+* `icon_loading`: Enables loading window icons directly from files. Depends on the [`image` crate](https://crates.io/crates/image).
+* `serde`: Enables serialization/deserialization of certain types with [Serde](https://crates.io/crates/serde).
 
 ### Platform-specific usage
 

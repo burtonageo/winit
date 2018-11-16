@@ -1,8 +1,6 @@
 #![cfg(target_os = "macos")]
 
-use std::convert::From;
 use std::os::raw::c_void;
-use cocoa::appkit::NSApplicationActivationPolicy;
 use {LogicalSize, MonitorId, Window, WindowBuilder};
 
 /// Additional methods on `Window` that are specific to MacOS.
@@ -16,6 +14,14 @@ pub trait WindowExt {
     ///
     /// The pointer will become invalid when the `Window` is destroyed.
     fn get_nsview(&self) -> *mut c_void;
+
+    /// Request user attention, causing the application's dock icon to bounce.
+    /// Note that this has no effect if the application is already focused.
+    ///
+    /// The `is_critical` flag has the following effects:
+    /// - `false`: the dock icon will only bounce once.
+    /// - `true`: the dock icon will bounce until the application is focused.
+    fn request_user_attention(&self, is_critical: bool);
 }
 
 impl WindowExt for Window {
@@ -27,6 +33,11 @@ impl WindowExt for Window {
     #[inline]
     fn get_nsview(&self) -> *mut c_void {
         self.window.get_nsview()
+    }
+
+    #[inline]
+    fn request_user_attention(&self, is_critical: bool) {
+        self.window.request_user_attention(is_critical)
     }
 }
 
@@ -44,19 +55,6 @@ pub enum ActivationPolicy {
 impl Default for ActivationPolicy {
     fn default() -> Self {
         ActivationPolicy::Regular
-    }
-}
-
-impl From<ActivationPolicy> for NSApplicationActivationPolicy {
-    fn from(activation_policy: ActivationPolicy) -> Self {
-        match activation_policy {
-            ActivationPolicy::Regular =>
-                NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular,
-            ActivationPolicy::Accessory =>
-                NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory,
-            ActivationPolicy::Prohibited =>
-                NSApplicationActivationPolicy::NSApplicationActivationPolicyProhibited,
-        }
     }
 }
 

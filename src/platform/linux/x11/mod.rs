@@ -278,25 +278,25 @@ impl EventsLoop {
                     }
                 } else if client_msg.message_type == self.dnd.atoms.position {
                     // This event occurs every time the mouse moves while a file's being dragged
-                    // over our window. We emit HoveredFile in response; while the Mac OS X backend
-                    // does that upon a drag entering, XDnD doesn't have access to the actual drop
+                    // over our window. We emit HoveredFile in response; while the macOS backend
+                    // does that upon a drag entering, XDND doesn't have access to the actual drop
                     // data until this event. For parity with other platforms, we only emit
-                    // HoveredFile the first time, though if winit's API is later extended to
-                    // supply position updates with HoveredFile or another event, implementing
+                    // `HoveredFile` the first time, though if winit's API is later extended to
+                    // supply position updates with `HoveredFile` or another event, implementing
                     // that here would be trivial.
 
                     let source_window = client_msg.data.get_long(0) as c_ulong;
 
-                    // Equivalent to (x << shift) | y
-                    // where shift = mem::size_of::<c_short>() * 8
+                    // Equivalent to `(x << shift) | y`
+                    // where `shift = mem::size_of::<c_short>() * 8`
                     // Note that coordinates are in "desktop space", not "window space"
-                    // (in x11 parlance, they're root window coordinates)
+                    // (in X11 parlance, they're root window coordinates)
                     //let packed_coordinates = client_msg.data.get_long(2);
                     //let shift = mem::size_of::<libc::c_short>() * 8;
                     //let x = packed_coordinates >> shift;
                     //let y = packed_coordinates & !(x << shift);
 
-                    // By our own state flow, version should never be None at this point.
+                    // By our own state flow, `version` should never be `None` at this point.
                     let version = self.dnd.version.unwrap_or(5);
 
                     // Action is specified in versions 2 and up, though we don't need it anyway.
@@ -318,23 +318,21 @@ impl EventsLoop {
                                     // In version 0, time isn't specified
                                     ffi::CurrentTime
                                 };
-                                // This results in the SelectionNotify event below
+                                // This results in the `SelectionNotify` event below
                                 self.dnd.convert_selection(window, time);
                             }
                             self.dnd.send_status(window, source_window, DndState::Accepted)
-                                .expect("Failed to send XDnD status message.");
+                                .expect("Failed to send `XdndStatus` message.");
                         }
                     } else {
                         unsafe {
                             self.dnd.send_status(window, source_window, DndState::Rejected)
-                                .expect("Failed to send XDnD status message.");
-                            self.dnd.send_finished(window, source_window, DndState::Rejected)
-                                .expect("Failed to send XDnD finished message.");
+                                .expect("Failed to send `XdndStatus` message.");
                         }
                         self.dnd.reset();
                     }
                 } else if client_msg.message_type == self.dnd.atoms.drop {
-                    if let Some(source_window) = self.dnd.source_window {
+                    let (source_window, state) = if let Some(source_window) = self.dnd.source_window {
                         if let Some(Ok(ref path_list)) = self.dnd.result {
                             for path in path_list {
                                 callback(Event::WindowEvent {
@@ -343,10 +341,16 @@ impl EventsLoop {
                                 });
                             }
                         }
-                        unsafe {
-                            self.dnd.send_finished(window, source_window, DndState::Accepted)
-                                .expect("Failed to send XDnD finished message.");
-                        }
+                        (source_window, DndState::Accepted)
+                    } else {
+                        // `source_window` won't be part of our DND state if we already rejected the drop in our
+                        // `XdndPosition` handler.
+                        let source_window = client_msg.data.get_long(0) as c_ulong;
+                        (source_window, DndState::Rejected)
+                    };
+                    unsafe {
+                        self.dnd.send_finished(window, source_window, state)
+                            .expect("Failed to send `XdndFinished` message.");
                     }
                     self.dnd.reset();
                 } else if client_msg.message_type == self.dnd.atoms.leave {
@@ -412,10 +416,10 @@ impl EventsLoop {
                     let new_inner_size = (xev.width as u32, xev.height as u32);
                     let new_inner_position = (xev.x as i32, xev.y as i32);
 
-                    let monitor = window.get_current_monitor(); // This must be done *before* locking!
+                    let mut monitor = window.get_current_monitor(); // This must be done *before* locking!
                     let mut shared_state_lock = window.shared_state.lock();
 
-                    let (resized, moved) = {
+                    let (mut resized, moved) = {
                         let resized = util::maybe_change(&mut shared_state_lock.size, new_inner_size);
                         let moved = if is_synthetic {
                             util::maybe_change(&mut shared_state_lock.inner_position, new_inner_position)
@@ -435,31 +439,7 @@ impl EventsLoop {
                         (resized, moved)
                     };
 
-                    // This is a hack to ensure that the DPI adjusted resize is actually applied on all WMs. KWin
-                    // doesn't need this, but Xfwm does.
-                    if let Some(adjusted_size) = shared_state_lock.dpi_adjusted {
-                        let rounded_size = (adjusted_size.0.round() as u32, adjusted_size.1.round() as u32);
-                        if new_inner_size == rounded_size {
-                            // When this finally happens, the event will not be synthetic.
-                            shared_state_lock.dpi_adjusted = None;
-                        } else {
-                            unsafe {
-                                (self.xconn.xlib.XResizeWindow)(
-                                    self.xconn.display,
-                                    xwindow,
-                                    rounded_size.0 as c_uint,
-                                    rounded_size.1 as c_uint,
-                                );
-                            }
-                        }
-                    }
-
                     let mut events = Events::default();
-
-                    if resized {
-                        let logical_size = LogicalSize::from_physical(new_inner_size, monitor.hidpi_factor);
-                        events.resized = Some(WindowEvent::Resized(logical_size));
-                    }
 
                     let new_outer_position = if moved || shared_state_lock.position.is_none() {
                         // We need to convert client area position to window position.
@@ -497,9 +477,9 @@ impl EventsLoop {
                             });
                         let new_hidpi_factor = {
                             let window_rect = util::AaRect::new(new_outer_position, new_inner_size);
-                            let monitor = self.xconn.get_monitor_for_window(Some(window_rect));
+                            monitor = self.xconn.get_monitor_for_window(Some(window_rect));
                             let new_hidpi_factor = monitor.hidpi_factor;
-                            shared_state_lock.last_monitor = Some(monitor);
+                            shared_state_lock.last_monitor = Some(monitor.clone());
                             new_hidpi_factor
                         };
                         if last_hidpi_factor != new_hidpi_factor {
@@ -512,7 +492,34 @@ impl EventsLoop {
                             );
                             flusher.queue();
                             shared_state_lock.dpi_adjusted = Some((new_width, new_height));
+                            // if the DPI factor changed, force a resize event to ensure the logical
+                            // size is computed with the right DPI factor
+                            resized = true;
                         }
+                    }
+
+                    // This is a hack to ensure that the DPI adjusted resize is actually applied on all WMs. KWin
+                    // doesn't need this, but Xfwm does.
+                    if let Some(adjusted_size) = shared_state_lock.dpi_adjusted {
+                        let rounded_size = (adjusted_size.0.round() as u32, adjusted_size.1.round() as u32);
+                        if new_inner_size == rounded_size {
+                            // When this finally happens, the event will not be synthetic.
+                            shared_state_lock.dpi_adjusted = None;
+                        } else {
+                            unsafe {
+                                (self.xconn.xlib.XResizeWindow)(
+                                    self.xconn.display,
+                                    xwindow,
+                                    rounded_size.0 as c_uint,
+                                    rounded_size.1 as c_uint,
+                                );
+                            }
+                        }
+                    }
+
+                    if resized {
+                        let logical_size = LogicalSize::from_physical(new_inner_size, monitor.hidpi_factor);
+                        events.resized = Some(WindowEvent::Resized(logical_size));
                     }
 
                     events
@@ -520,13 +527,13 @@ impl EventsLoop {
 
                 if let Some(events) = events {
                     let window_id = mkwid(xwindow);
+                    if let Some(event) = events.dpi_changed {
+                        callback(Event::WindowEvent { window_id, event });
+                    }
                     if let Some(event) = events.resized {
                         callback(Event::WindowEvent { window_id, event });
                     }
                     if let Some(event) = events.moved {
-                        callback(Event::WindowEvent { window_id, event });
-                    }
-                    if let Some(event) = events.dpi_changed {
                         callback(Event::WindowEvent { window_id, event });
                     }
                 }
@@ -857,20 +864,26 @@ impl EventsLoop {
                             event: CursorEntered { device_id },
                         });
 
-                        // The mods field on this event isn't actually populated, so query the
-                        // pointer device. In the future, we can likely remove this round-trip by
-                        // relying on Xkb for modifier values.
-                        let modifiers = self.xconn.query_pointer(xev.event, xev.deviceid)
-                            .expect("Failed to query pointer device").get_modifier_state();
-
-                        let dpi_factor = self.with_window(xev.event, |window| {
+                        if let Some(dpi_factor) = self.with_window(xev.event, |window| {
                             window.get_hidpi_factor()
-                        });
-                        if let Some(dpi_factor) = dpi_factor {
+                        }) {
                             let position = LogicalPosition::from_physical(
                                 (xev.event_x as f64, xev.event_y as f64),
                                 dpi_factor,
                             );
+
+                            // The mods field on this event isn't actually populated, so query the
+                            // pointer device. In the future, we can likely remove this round-trip by
+                            // relying on `Xkb` for modifier values.
+                            //
+                            // This needs to only be done after confirming the window still exists,
+                            // since otherwise we risk getting a `BadWindow` error if the window was
+                            // dropped with queued events.
+                            let modifiers = self.xconn
+                                .query_pointer(xev.event, xev.deviceid)
+                                .expect("Failed to query pointer device")
+                                .get_modifier_state();
+
                             callback(Event::WindowEvent {
                                 window_id,
                                 event: CursorMoved {
